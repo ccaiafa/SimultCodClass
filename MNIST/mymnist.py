@@ -79,8 +79,8 @@ class MNIST(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        #return img, target  # I only modified this line by adding ", index" (Cesar, January 12, 2019)
-        return img, target, index # I only modified this line by adding ", index" (Cesar, January 12, 2019)
+        #return img, target  # I only modified this line by adding ", index" (January 12, 2019)
+        return img, target, index # I only modified this line by adding ", index" (January 12, 2019)
 
     def __len__(self):
         if self.train:
