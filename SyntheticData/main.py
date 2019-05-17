@@ -48,6 +48,8 @@ def main():
                         help='input l1 regularization (default: 0.4)')
     parser.add_argument('--gradientS-step-train', type=float, default=1.0, metavar='alpha',
                         help='input step for SGD training (default: 1)')
+    parser.add_argument('--gradientS-step-test', type=float, default=5.0, metavar='alpha',
+                        help='input step for SGD testing (default: 5)')
     parser.add_argument('--K', type=int, default=4, metavar='sparsity',
                         help='input sparsity (default: 2)')
     parser.add_argument('--threshold', type=float, default=0.4, metavar='threshold',
@@ -62,45 +64,52 @@ def main():
     L = 2*N  # Number of columns in the dictionary
     num_classes = 2
     Itrain = 10000 # Number of data samples
+    Itest = 1000
 
     # Generate synthetical dataset
     D = gen_dict(N)
-    x_train, y_train, w, b = gen_data(Itrain, D, args.K, args.threshold)
+    x, y, w, b = gen_data(Itrain + Itest, D, args.K, args.threshold)
+    x_train, y_train = x[:,:Itrain], y[:,:Itrain]
+    x_test, y_test = x[:,Itrain:], y[:,Itrain:]
+    del x, y
 
-    # Create mask
+    # Create masks
     mask_train = gen_mask(N, Itrain, args.missing_data_perc)
+    mask_test = gen_mask(N, Itest, args.missing_data_perc)
     print('Dataset and masks generated')
 
     ####################################################################################################################
     # Sequential approach (data imputation followed by training)
     print('Applying sequential approach ...')
     accutrain_seq = 0.0
-    # grid search of optimal l1_reg parameter
-    for args.l1_reg in np.arange(0.01, 0.21, 0.01):
-        model = MyModel(L, N, num_classes).to(device)
-        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-        # Initialize sparse coefficients
-        Strain = torch.randn(L, Itrain, device="cpu")  # sparse coefficients
+    model = MyModel(L, N, num_classes).to(device)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-        # 1st Find sparse representation
-        for epoch in range(1, args.epochs + 1):
-            t = time.time()
-            Strain, Loss = optimize_D_S(Strain, mask_train, model, x_train*mask_train, y_train, args, device, epoch)
-            print('Finding sparsest representation, epoch ', str(epoch), 'Loss=', float(Loss))
+    # Initialize sparse coefficients
+    Strain = torch.randn(L, Itrain, device="cpu")  # sparse coefficients
+    Stest = torch.randn(L, Itest, device="cpu")  # sparse coefficients
 
-        # 2nd Optimize classifier
-        for epoch in range(1, args.epochs + 1):
-            accutrain = optimize_classifier(args, model, Strain, device, y_train, optimizer, epoch)
-            print('Finding classifier, epoch ', str(epoch), 'Accu Train Seq=', accutrain)
-        if accutrain > accutrain_seq:
-            accutrain_seq = accutrain
-            l1_reg_opt = args.l1_reg
+    # 1st Find sparse representation
+    for epoch in range(1, args.epochs + 1):
+        t = time.time()
+        Strain, Loss = optimize_DS(Strain, mask_train, model, x_train*mask_train, y_train, optimizer, args, device, epoch)
+        print('Finding sparsest representation, epoch ', str(epoch), 'Loss=', float(Loss))
+
+    # 2nd Optimize classifier
+    for epoch in range(1, args.epochs + 1):
+        accutrain_seq = optimize_classifier(args, model, Strain, device, y_train, optimizer, epoch)
+        print('Finding classifier, epoch ', str(epoch), 'Accu Train Seq=', accutrain_seq)
+
+    ## Test dataset
+    for epoch in range(1, args.epochs + 1):
+        t = time.time()
+        Stest, accutest_seq = optimize_S(Stest, mask_test, model, mask_test * x_test, y_test, optimizer, args, device, epoch)
+        print('Accu Test Seq=', accutest_seq, ', Elapsed tme=', time.time() - t, 'sec')
 
     ####################################################################################################################
     # Simultaneous approach
     print('Applying simultaneous approach ...')
-    args.l1_reg = 0.1 # This value for parameter l1_reg gives good results (no grid search needed here)
     model = MyModel(L, N, num_classes).to(device)
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
@@ -110,17 +119,24 @@ def main():
         Strain, accutrain_sim = simultaneous_train(args, model, Strain, mask_train, device, x_train*mask_train, y_train, optimizer, epoch)
         print('epoch ',str(epoch),'Accu Train Simult=', accutrain_sim)
 
+    ## Test dataset
+    for epoch in range(1, args.epochs + 1):
+        t = time.time()
+        Stest, accutest_sim = optimize_S(Stest, mask_test, model, mask_test * x_test, y_test, optimizer, args, device,
+                                     epoch)
+    print('Accu Test Sim=', accutest_sim, ', Elapsed tme=', time.time() - t, 'sec')
+
     ####################################################################################################################
     # print results
-    print(' ')
-    print('Results Sequential method:')
-    print('sparse_rep_coeff=', str(args.sparse_rep_coeff), 'l1_reg=', str(l1_reg_opt))
-    print('Training Accuracy=', str(accutrain_seq))
+    print("")
+    print("Sequential:")
+    print("Accu Train = ", accutrain_seq)
+    print("Accu Test =", accutest_seq)
 
-    print(' ')
-    print('Results Simultaneous method:')
-    print('sparse_rep_coeff=', str(args.sparse_rep_coeff), 'l1_reg=', str(args.l1_reg))
-    print('Training Accuracy=', str(accutrain_sim))
+    print("")
+    print("Simultaneous:")
+    print("Accu Train = ", accutrain_sim)
+    print("Accu Test =", accutest_sim)
 
 
 if __name__ == "__main__":
