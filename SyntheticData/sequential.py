@@ -86,19 +86,21 @@ def optimize_DS(Stot, mask_tot, model, x_train, y_train, optimizer, args, device
 
     return Stot, (correct / x_train.shape[1])
 
-
 # Train a classifier given a sparse decomposition of data (x = Ds)
 def optimize_classifier(args, model, Stot, device, y_train, optimizer, epoch):
     K = model.FC.weight.data.shape[0]
+    #print('using device=', device)
+    model.train()
+    model.decoder.weight.requires_grad = False
+    model.decoder.weight.grad = None
+    model.FC.weight.requires_grad = True
     tot_loss = 0
     correct = 0
     for batch_idx in range(round(Stot.shape[1]/args.batch_size)):
+    #for batch_idx, (data, target, idx) in enumerate(train_loader):
         idx = range(batch_idx*args.batch_size, (batch_idx+1)*args.batch_size)
         target = y_train[:, idx]
-
-        model.train()
-        model.decoder.weight .requires_grad = False
-
+        #model.param.
         S = Stot[:, idx]
         loc = sub2ind([target.shape[1], K],
                       torch.tensor(range(target.shape[1]), device=device),
@@ -107,7 +109,7 @@ def optimize_classifier(args, model, Stot, device, y_train, optimizer, epoch):
         target, S = target.to(device), S.to(device)
 
         # Optimize W, b
-        optimizer.zero_grad()
+
 
         s, xap = model(S.t())
         pred = s.max(1, keepdim=True)[1]
@@ -116,17 +118,20 @@ def optimize_classifier(args, model, Stot, device, y_train, optimizer, epoch):
 
         Loss_1 = torch.mean(-torch.log(probs))
 
+        optimizer.zero_grad()
         Loss_1.backward()
         optimizer.step() # Here is where W, b are updated based on Loss1
 
+
         # print current results
-        #if batch_idx % args.log_interval == 0:
-        #    print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss1(class): {:.6f}'.format(
-        #        epoch, batch_idx * len(xap.t()), len(Stot.t()),
-        #        100. * batch_idx / len(Stot.t()),
-        #        float(Loss_1)))
+
+        if batch_idx % args.log_interval == 0:
+            print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss1(class): {:.6f}'.format(
+                epoch, batch_idx * len(xap.t()), len(Stot.t()),
+                100. * batch_idx / len(Stot.t()),
+                float(Loss_1)))
 
         tot_loss += torch.mean(-torch.log(probs)) # sum up batch loss
         correct += pred.eq(target.view_as(pred)).sum().item()
 
-    return correct / Stot.shape[1]
+    return (correct / Stot.shape[1])
