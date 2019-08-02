@@ -4,6 +4,7 @@ import time as time
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import pickle
 
 from gen_data import *
 from simultaneous import *
@@ -13,12 +14,15 @@ from sequential import *
 class MyModel(nn.Module):
     def __init__(self, J, im_size, num_classes):
         super(MyModel, self).__init__()
+        #self.dropoutin = nn.Dropout(p=0.0)
         self.decoder = nn.Linear(J, im_size, bias=False) # dictionary matrix
+        self.dropouth = nn.Dropout(p=0.25)
         self.FC = nn.Linear(im_size, num_classes) # Full connected layer
+        #self.dropoutout = nn.Dropout(p=0.0)
 
     def forward(self, x):
         xap = self.decoder(x.squeeze()) # xap = Ds
-        x = self.FC(xap)
+        x = self.FC(self.dropouth(xap))
         return F.softmax(x, dim=1), xap
 
 
@@ -28,7 +32,7 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch Synthetical Data Example')
     parser.add_argument('--batch-size', type=int, default=250, metavar='N',
                         help='input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=2000, metavar='N',
+    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                         help='number of epochs to train (default: 3000)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 0.1)')
@@ -41,7 +45,7 @@ def main():
     parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--missing-data-perc', type=float, default=0.25, metavar='perc',
-                        help='input percentage of missing data (default:0.75)')
+                        help='input percentage of missing data (default:0.25)')
     parser.add_argument('--sparse-rep-coeff', type=float, default=0.1, metavar='lambda_s',
                         help='input sparse representation coefficient (default: 0.1)')
     parser.add_argument('--l1-reg', type=float, default=0.1, metavar='lambda_1',
@@ -50,9 +54,9 @@ def main():
                         help='input step for SGD training (default: 1)')
     parser.add_argument('--gradientS-step-test', type=float, default=2.5, metavar='alpha',
                         help='input step for SGD testing (default: 5)')
-    parser.add_argument('--K', type=int, default=8, metavar='sparsity',
+    parser.add_argument('--K', type=int, default=4, metavar='sparsity',
                         help='input sparsity (default: 2)')
-    parser.add_argument('--threshold', type=float, default=1.0, metavar='threshold',
+    parser.add_argument('--threshold', type=float, default=0.8, metavar='threshold',
                         help='input distance to hiprplane (default: 0.25)')
     args = parser.parse_args()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -106,6 +110,36 @@ def main():
         Stest, accutest_seq = optimize_S(Stest, mask_test, model, mask_test * x_test, y_test, optimizer, args, device, epoch)
         print('Accu Test Seq=', accutest_seq, ', Elapsed tme=', time.time() - t, 'sec')
 
+
+    ####################################################################################################################
+    # # Sequential approach D fixed(data imputation followed by training)
+    # print('Applying sequential approach D fixed...')
+    #
+    # model = MyModel(L, N, num_classes).to(device)
+    # model.decoder.weight.data = D
+    # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    #
+    # # Initialize sparse coefficients
+    # Strain = torch.randn(L, Itrain, device="cpu")  # sparse coefficients
+    # Stest = torch.randn(L, Itest, device="cpu")  # sparse coefficients
+    #
+    # # 1st Find sparse representation
+    # for epoch in range(1, args.epochs + 1):
+    #     t = time.time()
+    #     Strain, accutrain_seq_Dfix = optimize_S(Strain, mask_train, model, x_train*mask_train, y_train, optimizer, args, device, epoch)
+    #     print('Finding sparsest representation D fixed, epoch ', str(epoch), 'Accu Train seq D Fix=', float(accutrain_seq_Dfix))
+    #
+    # # 2nd Optimize classifier
+    # for epoch in range(1, 101):
+    #     accutrain_seq_Dfix = optimize_classifier(args, model, Strain, device, y_train, optimizer, epoch)
+    #     print('Finding classifier, epoch ', str(epoch), 'Accu Train Seq D fixed=', accutrain_seq_Dfix)
+    #
+    # # Test dataset
+    # for epoch in range(1, args.epochs + 1):
+    #     t = time.time()
+    #     Stest, accutest_seq_Dfix = optimize_S(Stest, mask_test, model, mask_test * x_test, y_test, optimizer, args, device, epoch)
+    #     print('Accu Test Seq Dfix=', accutest_seq_Dfix, ', Elapsed tme=', time.time() - t, 'sec')
+
     ####################################################################################################################
     # Simultaneous approach
     print('Applying simultaneous approach ...')
@@ -128,6 +162,10 @@ def main():
 
     ####################################################################################################################
     # print results
+    # print("")
+    # print("Sequential Dfixed:")
+    # print("Accu Train = ", accutrain_seq_Dfix)
+    # print("Accu Test =", accutest_seq_Dfix)
 
     print("")
     print("Sequential:")
@@ -139,6 +177,14 @@ def main():
     print("Accu Train = ", accutrain_sim)
     print("Accu Test =", accutest_sim)
 
+    fName = "results_"+str(args.missing_data_perc)+"_"+str(args.K)+"_"+str(args.threshold)+".pickle"
+    with open('output/'+fName, 'wb') as f:
+        # move to cpu first
+        #if torch.cuda.is_available():
+        #    accutrain_seq = accutrain_seq.cpu()
+        #    accutrain_sim = accutrain_sim.cpu()
+        #pickle.dump([args, accutrain_seq_Dfix, accutest_seq_Dfix, accutrain_seq, accutest_seq, accutrain_sim, accutest_sim], f)
+        pickle.dump([args, accutrain_seq, accutest_seq, accutrain_sim, accutest_sim], f)
 
 if __name__ == "__main__":
     main()
