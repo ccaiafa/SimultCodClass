@@ -135,3 +135,4 @@ def optimize_classifier(args, model, Stot, device, y_train, optimizer, epoch):
         correct += pred.eq(target.view_as(pred)).sum().item()
 
     return (correct / Stot.shape[1])
+

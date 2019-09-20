@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 
 # Convert matrix indices to linear indices
@@ -8,6 +9,7 @@ def sub2ind(array_shape, rows, cols):
 
 # Simultaneous training of classifier along data representation (D and s)
 def simultaneous_train(args, model, Stot, mask_tot, device, x_train, y_train, optimizer, epoch):
+    do = nn.Dropout(0.5)
     K = model.FC.weight.data.shape[0]
     tot_loss = 0
     correct = 0
@@ -62,7 +64,7 @@ def simultaneous_train(args, model, Stot, mask_tot, device, x_train, y_train, op
         Loss = Loss_1 + Loss_2 + Loss_3
         Loss.backward()
 
-        dLdS = S.grad
+        dLdS = do(S.grad)
         z = -args.gradientS_step_train * dLdS
         if args.l1_reg > 0: # avoid zero crossing
             z[S * (S + z) < 0] = -S[torch.squeeze(S * (S + z) < 0)]
@@ -82,12 +84,12 @@ def simultaneous_train(args, model, Stot, mask_tot, device, x_train, y_train, op
         diff = mask * (xap.t() - data)
         Loss_2 = args.sparse_rep_coeff * torch.sum(diff * diff) / (data.shape[0] * (1.0 - args.missing_data_perc))
         Loss_3 = args.l1_reg * torch.sum(torch.abs(S)) / data.shape[0]
-        #if batch_idx % args.log_interval == 0:
-        #    print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss1(class): {:.6f}\tLoss2(repres): {:.6f}\tLoss3 (sparsity): {:.6f}\tLossTot (1+2+3): {:.6f}'.format(
-        #        epoch, batch_idx * len(data.t()), len(x_train.t()),
-        #        100. * batch_idx / len(x_train.t()),
-        #        float(Loss_1), float(Loss_2), float(Loss_3),
-        #        float(Loss_1 + Loss_2 + Loss_3)))
+        if batch_idx % args.log_interval == 0:
+            print('Epoch: {} [{}/{} ({:.0f}%)]\tLoss1(class): {:.6f}\tLoss2(repres): {:.6f}\tLoss3 (sparsity): {:.6f}\tLossTot (1+2+3): {:.6f}'.format(
+                epoch, batch_idx * len(data.t()), len(x_train.t()),
+                100. * batch_idx / len(x_train.t()),
+                float(Loss_1), float(Loss_2), float(Loss_3),
+                float(Loss_1 + Loss_2 + Loss_3)))
 
         Stot[:, idx] = S.to("cpu")
         tot_loss += torch.mean(-torch.log(probs)) # sum up batch loss
