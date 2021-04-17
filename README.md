@@ -1,7 +1,7 @@
 # SimultCodClass
 Pytorch code for simultaneous classifier learning and sparse coding.
 
-This package includes the code used for the following experiments in the paper "Learning from Incomplete Data by Simultaneous Training of Neural Networks and Sparse Coding" by CF Caiafa, Z Wang, J Solé-Casals and Q Zhao, as published in: https://arxiv.org/abs/2011.14047 
+This package includes the code used for the following experiments in the paper "Learning from Incomplete Data by Simultaneous Training of Neural Networks and Sparse Coding" by CF Caiafa, Z Wang, J Solé-Casals and Q Zhao, accepted for presentation at L2ID Workshop at CVPR 2021 (19 - 25 June, 2021). Preprint available at: https://arxiv.org/abs/2011.14047 
  - **Synthetic dataset with a logistic regression classifier (1-layer NN)** We compare our simultaneous method with standard imputation methods: 
  
  **Seq. Sparse**: reconstructions are obtained by finding the sparsest representation compatible with the observations solving a LASSO problem;  
