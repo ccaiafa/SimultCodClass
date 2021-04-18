@@ -22,3 +22,5 @@ This package includes the code used for the following experiments in the paper "
  - Pytorch 1.0.0
  
 # SimultCodClass
+![Fig4](https://user-images.githubusercontent.com/11638664/115157492-f5bbe080-a05f-11eb-8b96-ccc2ad9a4887.png)
+
